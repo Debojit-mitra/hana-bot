@@ -9,6 +9,7 @@ import { mediaTools } from "./tools/media.tools.js";
 import { jenkinsTools } from "./tools/jenkins.tools.js";
 import { reminderTools } from "./tools/reminder.tools.js";
 import { weatherTools } from "./tools/weather.tools.js";
+import { docsTools } from "./tools/docs.tools.js";
 
 export interface AITool {
   name: string;
@@ -25,7 +26,8 @@ export const aiTools: AITool[] = [
   ...mediaTools,
   ...jenkinsTools,
   ...reminderTools,
-  ...weatherTools
+  ...weatherTools,
+  ...docsTools
 ];
 
 /**

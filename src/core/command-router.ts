@@ -1,4 +1,4 @@
-import { jidNormalizedUser, type WASocket, type WAMessage, proto } from '@whiskeysockets/baileys';
+import { jidNormalizedUser, type WASocket, type WAMessage, proto, downloadMediaMessage } from '@whiskeysockets/baileys';
 import { getConfig } from '../config/config.js';
 import { getEnvConfig } from '../config/env.js';
 import { isAuthorized, isAdmin, normalizeJid } from './auth.js';
@@ -6,6 +6,7 @@ import { sendPresenceUpdate } from './socket.js';
 import type { CommandContext, CommandHandler, ModuleRegistration } from '../types/index.js';
 import logger from '../utils/logger.js';
 import { TaskQueue } from './queue.js';
+import { interceptMedia } from './media-session.js';
 
 const modules: ModuleRegistration[] = [];
 const chatQueues = new Map<string, TaskQueue>();
@@ -129,13 +130,12 @@ async function processMessage(sock: WASocket, msg: WAMessage): Promise<void> {
     // Ignore status updates
     if (msg.key.remoteJid === 'status@broadcast') return;
 
-    // Extract text content from various message types
-    const text = extractTextContent(msg.message);
-    if (!text) return;
+    // Extract text content from various message types (can be empty string for raw images)
+    const text = extractTextContent(msg.message) || '';
 
     const config = getConfig();
     const prefix = config.commandPrefix;
-    const isCommand = text.startsWith(prefix);
+    const isCommand = text && text.startsWith(prefix);
 
     // Ignore messages sent by the bot itself, UNLESS it's a command in the "self chat"
     if (msg.key.fromMe && !isCommand) return;
@@ -158,6 +158,14 @@ async function processMessage(sock: WASocket, msg: WAMessage): Promise<void> {
 
     // Check if this is a command
     if (!isCommand) {
+        // Generic Media Session Interception
+        const intercepted = await interceptMedia(sock, msg, senderJid, jid);
+        if (intercepted) return; // Swallow message so AI doesn't process it
+
+        // Now we can safely ignore any remaining non-text messages (e.g. stickers, raw docs) 
+        // since we don't have multimodal AI yet.
+        if (!text) return;
+
         // If AI is enabled and not a command, forward to AI handler
         const aiHandler = findHandler('hana');
         const envConfig = getEnvConfig();

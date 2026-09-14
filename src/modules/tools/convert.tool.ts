@@ -131,27 +131,9 @@ export const processImageConversion = async (ctx: CommandContext, opts: ConvertO
             finalInputPath = midPath;
         }
 
-        if (opts.scale && opts.scale > 0) {
-            const meta = await sharp(finalInputPath).metadata();
-            if (meta.width && meta.height) {
-                opts.width = Math.round(meta.width * (opts.scale / 100));
-                opts.height = Math.round(meta.height * (opts.scale / 100));
-            }
-        }
+        await convertImageFile(finalInputPath, outputPath, opts);
 
-        // Run sharp conversion
-        let s = sharp(finalInputPath, { sequentialRead: false });
-        
-        if (opts.width || opts.height) {
-            s = s.resize(opts.width || null, opts.height || null, { fit: 'inside', withoutEnlargement: true });
-        }
-        
-        let formatOpts: any = {};
-        if (opts.quality && opts.quality >= 1 && opts.quality <= 100) {
-            formatOpts.quality = opts.quality;
-        }
-        
-        await s.toFormat(opts.targetFormat as any, formatOpts).toFile(outputPath);
+        const outBuffer = await fs.promises.readFile(outputPath);
 
         // Send converted file
         const baseName = fileName ? (fileName.substring(0, fileName.lastIndexOf('.')) || fileName) : 'image';
@@ -175,3 +157,21 @@ export const processImageConversion = async (ctx: CommandContext, opts: ConvertO
         throw err;
     }
 };
+
+/**
+ * Core image conversion logic independent of Baileys Context.
+ */
+export async function convertImageFile(inputPath: string, outputPath: string, opts: ConvertOptions): Promise<void> {
+    let s = sharp(inputPath, { sequentialRead: false });
+    
+    if (opts.width || opts.height) {
+        s = s.resize(opts.width || null, opts.height || null, { fit: 'inside', withoutEnlargement: true });
+    }
+    
+    let formatOpts: any = {};
+    if (opts.quality && opts.quality >= 1 && opts.quality <= 100) {
+        formatOpts.quality = opts.quality;
+    }
+    
+    await s.toFormat(opts.targetFormat as any, formatOpts).toFile(outputPath);
+}

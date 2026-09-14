@@ -78,8 +78,8 @@ export class GeminiProvider implements AIProvider {
       "- Format naturally for WhatsApp. Use *bold*, _italic_, and `inline code`.\n" +
       "- Use `-` or `*` for bullets and `1.` for numbered lists.\n" +
       "- Use `> text` for quotes.\n" +
-      "- Never use Markdown headers (`#`, `##`). Use *bold text* instead.\n";
-    "\n## Communication rules:\n" +
+      "- Never use Markdown headers (`#`, `##`). Use *bold text* instead.\n" +
+      "\n## Communication rules:\n" +
       "- NEVER mention your internal tool or function names (e.g., `get_system_stats`, `save_memory`, etc.) to the user. Describe what you can do in natural, conversational language.";
 
     // Fetch and inject persistent memories into system prompt
@@ -332,10 +332,10 @@ export class GeminiProvider implements AIProvider {
       return text;
     }
 
-    // Save history even on unknown response to avoid losing the user message
+    // Save history even on unknown/empty response to avoid losing the user message
     chatDoc.markModified("messages");
     await chatDoc.save();
-    return "❌ AI returned an unknown response format.";
+    return text || "";
   }
 
   /**

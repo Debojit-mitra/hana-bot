@@ -109,7 +109,9 @@ const handleAi: CommandHandler = async (ctx) => {
     const answer = await provider.ask(finalQuestion, undefined, ctx.jid, ctx);
 
     await ctx.react('');
-    await ctx.reply(answer);
+    if (answer && answer.trim().length > 0) {
+        await ctx.reply(answer);
+    }
 };
 
 export function createAIModule(): ModuleRegistration {

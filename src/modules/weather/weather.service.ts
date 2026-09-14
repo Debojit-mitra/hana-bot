@@ -4,6 +4,30 @@ const GEO_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
 const AQI_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
+/**
+ * Helper to fetch with exponential backoff for rate limits or 503s on free APIs.
+ */
+async function fetchWithRetry(url: string, retries = 2): Promise<Response> {
+    let lastErr: Error | null = null;
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const res = await fetch(url);
+            if (res.ok) return res;
+            if (res.status !== 503 && res.status !== 429 && res.status >= 500) {
+                // If it's 429 or 503 we definitely want to retry. If it's other 5xx we might also retry.
+            }
+            lastErr = new Error(`API error: ${res.status}`);
+            
+            // Wait before retry (500ms, 1000ms...)
+            if (i < retries) await new Promise(r => setTimeout(r, 500 * (i + 1)));
+        } catch (err: any) {
+            lastErr = err;
+            if (i < retries) await new Promise(r => setTimeout(r, 500 * (i + 1)));
+        }
+    }
+    throw lastErr;
+}
+
 export interface LocationResult {
     id: number;
     name: string;
@@ -108,7 +132,7 @@ export async function searchLocation(query: string): Promise<LocationResult | nu
         url.searchParams.append('language', 'en');
         url.searchParams.append('format', 'json');
 
-        const res = await fetch(url.toString());
+        const res = await fetchWithRetry(url.toString());
         if (!res.ok) throw new Error(`Geocoding API error: ${res.status}`);
 
         const data = await res.json() as any;
@@ -126,8 +150,8 @@ export async function searchLocation(query: string): Promise<LocationResult | nu
             admin1: hit.admin1,
             timezone: hit.timezone
         };
-    } catch (err) {
-        logger.error({ err, query }, 'Failed to search location');
+    } catch (err: any) {
+        logger.warn({ err: err.message, query }, 'Failed to search location (API might be overloaded)');
         return null;
     }
 }
@@ -147,7 +171,7 @@ export async function getWeatherData(lat: number, lon: number, timezone: string 
         url.searchParams.append('timezone', timezone);
         url.searchParams.append('forecast_days', '3'); // Get today + next 2 days
 
-        const res = await fetch(url.toString());
+        const res = await fetchWithRetry(url.toString());
         if (!res.ok) throw new Error(`Weather API error: ${res.status}`);
 
         const data = await res.json() as any;
@@ -176,8 +200,8 @@ export async function getWeatherData(lat: number, lon: number, timezone: string 
         };
 
         return { current, daily, hourly: data.hourly };
-    } catch (err) {
-        logger.error({ err, lat, lon }, 'Failed to fetch weather data');
+    } catch (err: any) {
+        logger.warn({ err: err.message, lat, lon }, 'Failed to fetch weather data (API might be overloaded)');
         return null;
     }
 }
@@ -193,7 +217,7 @@ export async function getAirQuality(lat: number, lon: number, timezone: string =
         url.searchParams.append('current', 'european_aqi,us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone');
         url.searchParams.append('timezone', timezone);
 
-        const res = await fetch(url.toString());
+        const res = await fetchWithRetry(url.toString());
         if (!res.ok) throw new Error(`AQI API error: ${res.status}`);
 
         const data = await res.json() as any;
@@ -209,8 +233,8 @@ export async function getAirQuality(lat: number, lon: number, timezone: string =
         };
 
         return aqi;
-    } catch (err) {
-        logger.error({ err, lat, lon }, 'Failed to fetch AQI data');
+    } catch (err: any) {
+        logger.warn({ err: err.message, lat, lon }, 'Failed to fetch AQI data (API might be overloaded)');
         return null;
     }
 }

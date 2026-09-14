@@ -1,6 +1,6 @@
 {
   "name": "hana-bot",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "WhatsApp bot for server monitoring, WireGuard VPN management, and AI chat",
   "main": "dist/index.js",
   "scripts": {
