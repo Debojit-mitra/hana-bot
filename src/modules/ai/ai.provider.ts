@@ -9,11 +9,10 @@ import { AIRateLimiter, TaskQueue } from "../../core/queue.js";
 const rateLimiter = new AIRateLimiter(
   () => getEnvConfig().ai.model,
   () => getEnvConfig().ai.fallbackModel,
-  () => getEnvConfig().ai.rpmLimit
+  () => getEnvConfig().ai.rpmLimit,
 );
 
 const toolQueue = new TaskQueue(2); // Limit concurrent tools to 2 to protect server resources
-
 
 /**
  * Abstract AI provider interface.
@@ -74,7 +73,13 @@ export class GeminiProvider implements AIProvider {
       ? `You are Hana, a quirky and precise server management bot assistant. Context: ${context}`
       : "You are Hana, a quirky and precise server management bot assistant. You have access to tools that check the actual status of this server and external servers. If you do not have the data or do not know the answer, say so directly—do NOT invent or hallucinate random data. Keep responses concise, precise, slightly funny, and beautifully formatted for WhatsApp (use *bold* and _italic_).";
 
-    systemPrompt += "\n\n## Communication rules:\n" +
+    systemPrompt +=
+      "\n\n## WhatsApp formatting:\n" +
+      "- Format naturally for WhatsApp. Use *bold*, _italic_, and `inline code`.\n" +
+      "- Use `-` or `*` for bullets and `1.` for numbered lists.\n" +
+      "- Use `> text` for quotes.\n" +
+      "- Never use Markdown headers (`#`, `##`). Use *bold text* instead.\n";
+    "\n## Communication rules:\n" +
       "- NEVER mention your internal tool or function names (e.g., `get_system_stats`, `save_memory`, etc.) to the user. Describe what you can do in natural, conversational language.";
 
     // Fetch and inject persistent memories into system prompt
@@ -111,10 +116,8 @@ export class GeminiProvider implements AIProvider {
     const envConfig = getEnvConfig();
     const maxMessages = envConfig.ai.historyMaxMessages || 50;
 
-    // Trim history if it gets too long
-    if (chatDoc.messages.length > maxMessages) {
-      chatDoc.messages = chatDoc.messages.slice(chatDoc.messages.length - maxMessages);
-    }
+    // Trim history if it gets too long (safe boundary-aware trim)
+    this.trimHistory(chatDoc, maxMessages);
 
     // Build tools payload
     const toolsPayload = [
@@ -134,11 +137,12 @@ export class GeminiProvider implements AIProvider {
         toolsPayload,
         chatDoc,
         ctx,
+        0, // recursion depth
       );
     } catch (err: any) {
       // Detect corrupted history and guide the user to fix it
-      if (err.message?.includes('400')) {
-        logger.warn({ sessionId }, 'Corrupted chat history detected');
+      if (err.message?.includes("400")) {
+        logger.warn({ sessionId }, "Corrupted chat history detected");
         return `⚠️ Oops! My conversation history got a little tangled up.\n\nPlease send \`!hana clear\` to reset it, then try your message again!`;
       }
       logger.error({ err }, "Gemini API call failed");
@@ -152,12 +156,14 @@ export class GeminiProvider implements AIProvider {
     tools: any[],
     chatDoc: any,
     ctx?: CommandContext,
+    depth: number = 0,
   ): Promise<string> {
+    const MAX_TOOL_DEPTH = 5;
+
     // Sanitize history: strip orphaned function call turns at the end
     this.sanitizeHistory(chatDoc.messages);
     const history = chatDoc.messages;
 
-    // Note: Gemini 1.5 Pro/Flash expects system instruction in a separate field
     const requestBody = {
       systemInstruction: { parts: [{ text: systemInstruction }] },
       contents: history,
@@ -169,7 +175,7 @@ export class GeminiProvider implements AIProvider {
     };
 
     const response = await rateLimiter.execute(
-      ctx?.jid || 'global',
+      ctx?.jid || "global",
       async (selectedModel: string) => {
         const res = await fetch(
           `${this.baseUrl}/v1beta/models/${selectedModel}:generateContent?key=${this.apiKey}`,
@@ -182,7 +188,10 @@ export class GeminiProvider implements AIProvider {
 
         if (!res.ok) {
           const error = await res.text();
-          logger.error({ status: res.status, error, selectedModel }, "Gemini API error");
+          logger.error(
+            { status: res.status, error, selectedModel },
+            "Gemini API error",
+          );
           throw new Error(`${res.status} ${res.statusText}`);
         }
         return res;
@@ -190,16 +199,19 @@ export class GeminiProvider implements AIProvider {
       async (waitSec: number) => {
         if (ctx?.sock && ctx.jid) {
           await ctx.sock.sendMessage(ctx.jid, {
-            text: `⏳ *Whoa there!* I'm processing too many requests right now.\nYour message is safely queued and will be answered in about *${waitSec} seconds*...`
+            text: `⏳ *Whoa there!* I'm processing too many requests right now.\nYour message is safely queued and will be answered in about *${waitSec} seconds*...`,
           });
         }
-      }
+      },
     );
 
     const data = (await response.json()) as any;
     const candidate = data?.candidates?.[0];
 
     if (!candidate) {
+      // Save history even on empty response to avoid losing the user message
+      chatDoc.markModified("messages");
+      await chatDoc.save();
       return "❌ AI returned an empty response.";
     }
 
@@ -207,11 +219,30 @@ export class GeminiProvider implements AIProvider {
     const functionCallParts = parts.filter((p: any) => p.functionCall);
 
     if (functionCallParts.length > 0) {
+      // Guard against runaway tool loops
+      if (depth >= MAX_TOOL_DEPTH) {
+        logger.warn(
+          { sessionId, depth },
+          "Max tool recursion depth reached, returning last response",
+        );
+        const lastText = parts.find((p: any) => p.text)?.text;
+        chatDoc.markModified("messages");
+        await chatDoc.save();
+        return (
+          lastText ||
+          "⚠️ I got stuck in a tool loop. Please try rephrasing your question."
+        );
+      }
+
       // Switch reaction to hourglass to indicate it's running a tool
       // But don't do this for memory tools, so memory saving feels seamless
-      const memoryTools = ["save_memory", "recall_memories", "delete_memory"];
+      const memoryToolNames = [
+        "save_memory",
+        "recall_memories",
+        "delete_memory",
+      ];
       const hasSlowTool = functionCallParts.some(
-        (p: any) => !memoryTools.includes(p.functionCall.name)
+        (p: any) => !memoryToolNames.includes(p.functionCall.name),
       );
 
       if (hasSlowTool && ctx?.react) {
@@ -236,7 +267,9 @@ export class GeminiProvider implements AIProvider {
 
         let result;
         try {
-          result = await toolQueue.enqueue(() => executeTool(funcName, funcArgs, ctx));
+          result = await toolQueue.enqueue(() =>
+            executeTool(funcName, funcArgs, ctx),
+          );
         } catch (err: any) {
           logger.error({ err, funcName }, "Tool execution failed");
           result = { error: err.message };
@@ -273,6 +306,7 @@ export class GeminiProvider implements AIProvider {
         tools,
         chatDoc,
         ctx,
+        depth + 1,
       );
     }
 
@@ -286,6 +320,11 @@ export class GeminiProvider implements AIProvider {
         parts: [{ text }],
       });
 
+      // Trim history again after tool-call rounds may have added extra entries
+      const envConfig = getEnvConfig();
+      const maxMessages = envConfig.ai.historyMaxMessages || 50;
+      this.trimHistory(chatDoc, maxMessages);
+
       // Persist final conversation state to DB
       chatDoc.markModified("messages");
       await chatDoc.save();
@@ -293,6 +332,9 @@ export class GeminiProvider implements AIProvider {
       return text;
     }
 
+    // Save history even on unknown response to avoid losing the user message
+    chatDoc.markModified("messages");
+    await chatDoc.save();
     return "❌ AI returned an unknown response format.";
   }
 
@@ -307,24 +349,65 @@ export class GeminiProvider implements AIProvider {
       const last = messages[messages.length - 1];
 
       // If the last entry is a model turn with functionCall parts, it's orphaned
-      if (last.role === 'model' && last.parts?.some((p: any) => p.functionCall)) {
-        logger.warn({ removed: last.parts.length }, 'Stripping orphaned functionCall turn from history');
+      if (
+        last.role === "model" &&
+        last.parts?.some((p: any) => p.functionCall)
+      ) {
+        logger.warn(
+          { removed: last.parts.length },
+          "Stripping orphaned functionCall turn from history",
+        );
         messages.pop();
         continue;
       }
 
       // If the last entry is a user turn with functionResponse parts but no
       // preceding model functionCall, also strip it
-      if (last.role === 'user' && last.parts?.some((p: any) => p.functionResponse)) {
-        const prev = messages.length >= 2 ? messages[messages.length - 2] : null;
-        if (!prev || prev.role !== 'model' || !prev.parts?.some((p: any) => p.functionCall)) {
-          logger.warn('Stripping orphaned functionResponse turn from history');
+      if (
+        last.role === "user" &&
+        last.parts?.some((p: any) => p.functionResponse)
+      ) {
+        const prev =
+          messages.length >= 2 ? messages[messages.length - 2] : null;
+        if (
+          !prev ||
+          prev.role !== "model" ||
+          !prev.parts?.some((p: any) => p.functionCall)
+        ) {
+          logger.warn("Stripping orphaned functionResponse turn from history");
           messages.pop();
           continue;
         }
       }
 
       break;
+    }
+  }
+
+  /**
+   * Trim history to maxMessages while ensuring we never cut in the middle
+   * of a functionCall/functionResponse sequence. After slicing, strip any
+   * leading entries that aren't a clean user-text turn so the history
+   * always starts with a proper user message.
+   */
+  private trimHistory(chatDoc: any, maxMessages: number): void {
+    if (chatDoc.messages.length <= maxMessages) return;
+
+    // Rough slice first
+    chatDoc.messages = chatDoc.messages.slice(
+      chatDoc.messages.length - maxMessages,
+    );
+
+    // Strip from the front until we land on a user turn with actual text content
+    // (not a functionResponse-only turn which would be orphaned after slicing)
+    while (chatDoc.messages.length > 0) {
+      const first = chatDoc.messages[0];
+      const hasFunctionResponse = first.parts?.some(
+        (p: any) => p.functionResponse,
+      );
+      const isUserText = first.role === "user" && !hasFunctionResponse;
+      if (isUserText) break;
+      chatDoc.messages.shift();
     }
   }
 }
@@ -352,9 +435,16 @@ export class OpenAICompatibleProvider implements AIProvider {
     ctx?: CommandContext,
   ): Promise<string> {
     try {
-      const systemPrompt = context
+      let systemPrompt = context
         ? `You are Hana, a helpful server management bot assistant. Context: ${context}`
-        : "You are Hana, a helpful server management bot assistant. Keep responses concise and formatted for WhatsApp (use *bold* and _italic_ for emphasis).";
+        : "You are Hana, a helpful server management bot assistant. Keep responses concise and beautifully formatted for WhatsApp.";
+
+      systemPrompt +=
+        "\n\n## WhatsApp formatting:\n" +
+        "- Format naturally for WhatsApp. Use *bold*, _italic_, and `inline code`.\n" +
+        "- Use `-` or `*` for bullets and `1.` for numbered lists.\n" +
+        "- Use `> text` for quotes.\n" +
+        "- Never use Markdown headers (`#`, `##`). Use *bold text* instead.\n";
 
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: "POST",

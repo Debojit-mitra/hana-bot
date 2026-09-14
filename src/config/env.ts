@@ -46,6 +46,7 @@ export function loadEnvConfig(): EnvConfig {
             webhookBaseUrl: process.env.WEBHOOK_BASE_URL,
             serverUrl: process.env.JENKINS_SERVER_URL,
         },
+        timezone: env.BOT_TIMEZONE || 'Asia/Kolkata',
     };
 
     if (env.EXTERNAL_SERVERS_JSON) {

@@ -95,6 +95,7 @@ export interface EnvConfig {
         webhookBaseUrl?: string;
         serverUrl?: string;
     };
+    timezone: string;
 }
 
 export interface BotConfig {

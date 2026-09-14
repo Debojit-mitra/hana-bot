@@ -7,6 +7,8 @@ import { adminTools } from "./tools/admin.tools.js";
 import { memoryTools } from "./tools/memory.tools.js";
 import { mediaTools } from "./tools/media.tools.js";
 import { jenkinsTools } from "./tools/jenkins.tools.js";
+import { reminderTools } from "./tools/reminder.tools.js";
+import { weatherTools } from "./tools/weather.tools.js";
 
 export interface AITool {
   name: string;
@@ -21,7 +23,9 @@ export const aiTools: AITool[] = [
   ...adminTools,
   ...memoryTools,
   ...mediaTools,
-  ...jenkinsTools
+  ...jenkinsTools,
+  ...reminderTools,
+  ...weatherTools
 ];
 
 /**

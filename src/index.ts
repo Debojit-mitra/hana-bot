@@ -1,4 +1,6 @@
 import "dotenv/config";
+import fs from "fs";
+import path from "path";
 import type { WASocket } from "@whiskeysockets/baileys";
 import { loadConfig, getConfig } from "./config/config.js";
 import { getEnvConfig } from "./config/env.js";
@@ -35,6 +37,10 @@ import {
   updateJenkinsSocket,
 } from "./modules/jenkins/jenkins.handler.js";
 import { startJenkinsServer } from "./modules/jenkins/jenkins.service.js";
+import { createRemindersModule } from "./modules/reminders/reminder.handler.js";
+import { startReminderScheduler } from "./modules/reminders/reminder.scheduler.js";
+import { createWeatherModule } from "./modules/weather/weather.handler.js";
+import { startWeatherScheduler } from "./modules/weather/weather.scheduler.js";
 import { createToolsModule } from "./modules/tools/tools.handler.js";
 import { formatHelp } from "./utils/format.js";
 import type { CommandHandler, ModuleRegistration } from "./types/index.js";
@@ -43,9 +49,21 @@ import logger from "./utils/logger.js";
 // ─── Main Boot Sequence ─────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  let version = "1.0";
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+    );
+    if (pkg.version) version = pkg.version;
+  } catch (err) {
+    // ignore
+  }
+
+  const rightSpaces = " ".repeat(Math.max(0, 14 - version.length));
+
   console.log(`
 ╔════════════════════════════════════╗
-║         🤖 Hana Bot v1.0           ║
+║         🤖 Hana Bot v${version}${rightSpaces}║
 ║   WhatsApp Server Management Bot   ║
 ╚════════════════════════════════════╝
 `);
@@ -75,6 +93,8 @@ async function main(): Promise<void> {
   registerModule(createJenkinsModule());
   registerModule(createCoreModule());
   registerModule(createToolsModule());
+  registerModule(createRemindersModule());
+  registerModule(createWeatherModule());
 
   logger.info("All modules registered");
 
@@ -83,8 +103,10 @@ async function main(): Promise<void> {
     onConnected: (sock: WASocket) => {
       logger.info("Bot is online and ready");
 
-      // Start alert scheduler
+      // Start schedulers
       startAlertScheduler(sock);
+      startReminderScheduler(sock);
+      startWeatherScheduler();
 
       // Start Jenkins webhook server
       updateJenkinsSocket(sock);
@@ -103,7 +125,7 @@ async function main(): Promise<void> {
         for (const jid of notifyList) {
           sock
             .sendMessage(jid, {
-              text: "🤖 *Hana is online!*\nType `!help` for available commands.",
+              text: "*🌸 Hana is online!*\nSay hi, ask me anything, or type `!help` to see what I can do.",
             })
             .catch(() => {
               /* ignore if user hasn't messaged bot yet */
@@ -271,9 +293,9 @@ function createCoreModule(): ModuleRegistration {
         await ctx.reply(
           [
             "👥 *Whitelist*",
-            "━━━━━━━━━━━━━━━━━━",
+            "━━━━━━━━━━━━━━",
             ...lines,
-            "━━━━━━━━━━━━━━━━━━",
+            "━━━━━━━━━━━━━━",
             `Total: ${list.length} user(s)`,
           ].join("\n"),
         );
@@ -283,7 +305,7 @@ function createCoreModule(): ModuleRegistration {
       default:
         await ctx.reply(
           "👥 *Whitelist* (Admin Only)\n" +
-            "━━━━━━━━━━━━━━━━━━\n" +
+            "━━━━━━━━━━━━━━\n" +
             "Usage:\n" +
             "  `!whitelist add <number> [name] [admin]` — Add user (optionally with name and as admin)\n" +
             "  `!whitelist remove <number>` — Remove user\n" +
