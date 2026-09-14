@@ -1,0 +1,43 @@
+{
+  "whitelist": [],
+  "adminJid": "",
+  "commandPrefix": "!",
+  "ping": {
+    "sites": [
+      {
+        "name": "Nextcloud",
+        "url": "https://next.zerotwobunny.qzz.io"
+      },
+      {
+        "name": "CasaOS",
+        "url": "https://casa.zerotwobunny.qzz.io"
+      }
+    ],
+    "intervalMinutes": 5,
+    "timeoutMs": 10000
+  },
+  "wireguard": {
+    "sshHost": "",
+    "sshPort": 22,
+    "sshUser": "root",
+    "sshKeyPath": "",
+    "interface": "wg0",
+    "configPath": "/etc/wireguard/wg0.conf",
+    "serverEndpoint": "",
+    "dns": "1.1.1.1,1.0.0.1",
+    "allowedIps": "0.0.0.0/0",
+    "subnet": "10.0.0"
+  },
+  "alerts": {
+    "enabled": true,
+    "notifyJid": "",
+    "checkIntervalMinutes": 5,
+    "failureThreshold": 2
+  },
+  "ai": {
+    "provider": "none",
+    "apiKey": "",
+    "model": "",
+    "baseUrl": ""
+  }
+}
