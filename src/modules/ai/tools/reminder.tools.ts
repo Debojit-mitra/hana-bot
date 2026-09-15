@@ -11,7 +11,7 @@ export const reminderTools = [
             properties: {
                 content: {
                     type: "STRING",
-                    description: "The message to send when the reminder fires. Be friendly!",
+                    description: "The message to send when the reminder fires. Be friendly! DO NOT include any prefix like '⏰ REMINDER' or 'Reminder:' in your content string, as the system automatically adds the title.",
                 },
                 cronExpression: {
                     type: "STRING",
