@@ -284,10 +284,16 @@ function createContext(
         sock,
 
         async reply(text: string) {
+            const matches = text.match(/@(\d+)/g);
+            let mentions: string[] | undefined = undefined;
+            if (matches) {
+                mentions = matches.map(m => m.replace('@', '') + '@s.whatsapp.net');
+            }
+
             try {
-                await sock.sendMessage(jid, { text }, { quoted: msg });
+                await sock.sendMessage(jid, { text, mentions }, { quoted: msg });
             } catch {
-                await sock.sendMessage(jid, { text });
+                await sock.sendMessage(jid, { text, mentions });
             }
         },
 

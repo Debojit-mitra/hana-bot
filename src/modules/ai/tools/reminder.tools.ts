@@ -75,7 +75,7 @@ export const reminderTools = [
     },
     {
         name: "list_reminders",
-        description: "List all active reminders in the current chat. Use this if the user asks what reminders are set.",
+        description: "List all active reminders in the current chat. Use this if the user asks what reminders are set, or if they ask you to simulate/show exactly what a reminder message will look like. If simulating a message, make sure to append the target JIDs at the bottom (e.g. '@919864729098') so they render as WhatsApp tags.",
         parameters: {
             type: "OBJECT",
             properties: {},

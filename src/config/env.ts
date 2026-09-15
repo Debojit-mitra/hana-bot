@@ -14,6 +14,7 @@ export function loadEnvConfig(): EnvConfig {
 
     const config: EnvConfig = {
         phoneNumber: env.PHONE_NUMBER || '',
+        ownerNumber: env.OWNER_NUMBER || undefined,
         mongoUri: env.MONGO_URI || env.MONGODB_URI || 'mongodb://127.0.0.1:27017/hanabot',
         externalServers: [],
         pingSites: [],

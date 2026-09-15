@@ -1,6 +1,7 @@
 import { schedule as cronSchedule, type ScheduledTask } from "node-cron";
 import type { WASocket } from "@whiskeysockets/baileys";
 import { getConfig, updateConfig } from "../../config/config.js";
+import { getEnvConfig } from "../../config/env.js";
 import { pingAll } from "../ping/ping.service.js";
 import {
   initAlertStates,
@@ -60,16 +61,18 @@ export function stopAlertScheduler(): void {
  */
 async function runAlertCheck(): Promise<void> {
   const config = getConfig();
+  const envConfig = getEnvConfig();
+  const allSites = [...envConfig.pingSites, ...config.ping.sites];
 
   if (!config.alerts.enabled || !socketRef) return;
-  if (config.ping.sites.length === 0) return;
+  if (allSites.length === 0) return;
 
   try {
     // Sync states in case sites were added/removed
     syncAlertStates();
 
     // Ping all sites
-    const results = await pingAll(config.ping.sites, config.ping.timeoutMs);
+    const results = await pingAll(allSites, config.ping.timeoutMs);
 
     // Process results and get alert messages
     const alertMessages = processResults(results);

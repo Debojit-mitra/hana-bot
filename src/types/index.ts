@@ -63,6 +63,7 @@ export interface AlertChannel {
 
 export interface EnvConfig {
     phoneNumber: string;
+    ownerNumber?: string;
     mongoUri: string;
     externalServers: ExternalServerConfig[];
     pingSites: SiteConfig[];

@@ -1,5 +1,6 @@
 import type { AlertState, PingResult } from '../../types/index.js';
 import { getConfig } from '../../config/config.js';
+import { getEnvConfig } from '../../config/env.js';
 import { formatAlertDown, formatAlertUp } from '../../utils/format.js';
 import logger from '../../utils/logger.js';
 
@@ -11,7 +12,9 @@ const alertStates = new Map<string, AlertState>();
  */
 export function initAlertStates(): void {
     const config = getConfig();
-    for (const site of config.ping.sites) {
+    const envConfig = getEnvConfig();
+    const allSites = [...envConfig.pingSites, ...config.ping.sites];
+    for (const site of allSites) {
         if (!alertStates.has(site.url)) {
             alertStates.set(site.url, {
                 url: site.url,
@@ -100,10 +103,12 @@ export function getAlertStates(): Map<string, AlertState> {
  */
 export function syncAlertStates(): void {
     const config = getConfig();
-    const currentUrls = new Set(config.ping.sites.map(s => s.url));
+    const envConfig = getEnvConfig();
+    const allSites = [...envConfig.pingSites, ...config.ping.sites];
+    const currentUrls = new Set(allSites.map(s => s.url));
 
     // Add new sites
-    for (const site of config.ping.sites) {
+    for (const site of allSites) {
         if (!alertStates.has(site.url)) {
             alertStates.set(site.url, {
                 url: site.url,

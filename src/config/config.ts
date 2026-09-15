@@ -27,8 +27,10 @@ export async function loadConfig(): Promise<BotConfig> {
     }
 
     // Ensure owner (from env) is always properly initialized in state
-    if (envConfig.phoneNumber) {
-        const cleanedNumber = envConfig.phoneNumber.replace(/[\s\-\+\(\)]/g, '');
+    // Set owner JID and add to whitelist/admins
+    const rawOwnerNumber = envConfig.ownerNumber || envConfig.phoneNumber;
+    if (rawOwnerNumber) {
+        const cleanedNumber = rawOwnerNumber.replace(/[\s\-\+\(\)]/g, '');
         const jid = `${cleanedNumber}@s.whatsapp.net`;
         currentConfig.ownerJid = jid;
         

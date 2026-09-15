@@ -40,7 +40,9 @@ Weather: ${JSON.stringify(weather.current)}
 Daily Forecast: ${JSON.stringify({ max: weather.daily.temperature_2m_max[0], min: weather.daily.temperature_2m_min[0], uv: weather.daily.uv_index_max[0], precip: weather.daily.precipitation_probability_max[0] })}
 AQI: ${JSON.stringify(aqi)}
 
-Keep it short (3-4 sentences max), engaging, and formatted for WhatsApp (use *bold* and emojis). Mention if they need an umbrella, sunscreen, or a mask if AQI is bad. Do not include standard greetings like "Hey there", just jump straight into the briefing!
+Keep it short (3-4 sentences max), engaging, and formatted for WhatsApp (use *bold* and emojis).
+CRITICAL: You MUST explicitly include actionable recommendations! If UV is > 6, explicitly remind them to wear sunscreen. If Rain is > 50%, explicitly remind them to take an umbrella. If AQI is > 100, explicitly recommend a mask.
+Do not include standard greetings like "Hey there", just jump straight into the briefing!
 `;
             
             // Provide a minimal context
@@ -89,7 +91,7 @@ async function checkSmartAlerts() {
 
             // Check AQI
             if (aqi.us_aqi > 150) {
-                alerts.push(`⚠️ *Air Quality Alert*: The AQI is currently *${aqi.us_aqi}* (Unhealthy). Consider staying indoors or wearing a mask.`);
+                alerts.push(`⚠️ *Air Quality*: AQI is *${aqi.us_aqi}* (Unhealthy) — consider staying indoors or wearing a mask.`);
             }
 
             // Check next 12 hours for sudden rain or extreme UV
@@ -122,11 +124,11 @@ async function checkSmartAlerts() {
                 }
 
                 if (rainTime && weather.current.precipitation === 0) {
-                    alerts.push(`🌧️ *Rain Alert*: High probability of rain starting around *${rainTime}*. Don't forget your umbrella!`);
+                    alerts.push(`🌧️ *Rain*: High chance of rain around *${rainTime}* — grab an umbrella!`);
                 }
                 
                 if (peakUv >= 8 && (new Date().getHours() < 15)) {
-                    alerts.push(`☀️ *UV Alert*: UV Index will reach *${peakUv}* (Very High) today. Wear sunscreen and avoid direct sun!`);
+                    alerts.push(`☀️ *UV*: Index will hit *${peakUv}* (Very High) — wear sunscreen!`);
                 }
             }
 
